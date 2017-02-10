@@ -313,25 +313,25 @@ def framework_supplier_declaration_overview(framework_slug):
 @login_required
 def framework_supplier_declaration_submit(framework_slug):
     framework = get_framework(data_api_client, framework_slug, allowed_statuses=['open'])
+
+    sf = data_api_client.get_supplier_framework_info(current_user.supplier_id, framework_slug)
+    # ensure our declaration is at least a dict
+    sf["declaration"] = sf.get("declaration") or {}
+
     content = content_loader.get_manifest(framework_slug, 'declaration').filter(sf["declaration"])
 
-    try:
-        declaration = data_api_client.get_supplier_declaration(current_user.supplier_id, framework_slug)["declaration"]
-    except APIError as e:
-        abort(400, "No declaration has been made by this supplier for this framework")
-
-    validator = get_validator(framework, content, declaration)
+    validator = get_validator(framework, content, sf["declaration"])
     errors = validator.get_error_messages()
     if errors:
         abort(400, "This declaration has incomplete questions")
 
-    declaration["status"] = "complete"
+    sf["declaration"]["status"] = "complete"
 
     try:
         data_api_client.set_supplier_declaration(
             current_user.supplier_id,
             framework["slug"],
-            declaration,
+            sf["declaration"],
             current_user.email_address,
         )
     except APIError as e:

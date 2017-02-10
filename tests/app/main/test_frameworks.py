@@ -38,6 +38,27 @@ def get_g_cloud_8():
     )
 
 
+def _assert_args_and_raise(e, *args, **kwargs):
+    def _inner(*inner_args, **inner_kwargs):
+        assert args == inner_args
+        assert kwargs == inner_kwargs
+        raise e
+    return _inner
+
+
+def _assert_args_and_return(retval, *args, **kwargs):
+    def _inner(*inner_args, **inner_kwargs):
+        assert args == inner_args
+        assert kwargs == inner_kwargs
+        return retval
+    return _inner
+
+
+@pytest.fixture(params=("GET", "POST"))
+def get_or_post(request):
+    return request.param
+
+
 @mock.patch('dmutils.s3.S3')
 @mock.patch('app.main.views.frameworks.data_api_client', autospec=True)
 class TestFrameworksDashboard(BaseApplicationTest):
@@ -2134,6 +2155,85 @@ class TestStartSupplierDeclaration(BaseApplicationTest):
 
             assert document.xpath("//a[normalize-space(string(.))='Start your declaration']/@href")[0] \
                 == '/suppliers/frameworks/g-cloud-7/declaration/g-cloud-7-essentials'
+
+
+@mock.patch('app.main.views.frameworks.data_api_client', autospec=True)
+class TestDeclarationOverviewSubmit(BaseApplicationTest):
+    """
+        Behaviour common to both GET and POST views
+    """
+    def test_supplier_not_interested(self, data_api_client, get_or_post):
+        with self.app.test_client():
+            self.login()
+
+            data_api_client.get_framework.side_effect = _assert_args_and_return(
+                self.framework(status="open"),
+                "g-cloud-7",
+            )
+            data_api_client.get_supplier_framework_info.side_effect = _assert_args_and_raise(
+                APIError(mock.Mock(status_code=404)),
+                1234,
+                "g-cloud-7",
+            )
+
+            response = getattr(self.client, get_or_post.lower())("/suppliers/frameworks/g-cloud-7/declaration")
+
+            assert response.status_code == 404
+
+    def test_framework_standstill(self, data_api_client, get_or_post):
+        with self.app.test_client():
+            self.login()
+
+            data_api_client.get_framework.side_effect = _assert_args_and_return(
+                self.framework(status="standstill"),
+                "g-cloud-7",
+            )
+            data_api_client.get_supplier_framework_info.side_effect = _assert_args_and_return(
+                self.supplier_framework(framework_slug="g-cloud-7"),
+                1234,
+                "g-cloud-7",
+            )
+
+            response = getattr(self.client, get_or_post.lower())("/suppliers/frameworks/g-cloud-7/declaration")
+
+            assert response.status_code == 404
+
+    def test_framework_unknown(self, data_api_client, get_or_post):
+        with self.app.test_client():
+            self.login()
+
+            data_api_client.get_framework.side_effect = _assert_args_and_raise(
+                APIError(mock.Mock(status_code=404)),
+                "muttoning-clouds",
+            )
+            data_api_client.get_supplier_framework_info.side_effect = _assert_args_and_raise(
+                APIError(mock.Mock(status_code=404)),
+                1234,
+                "muttoning-clouds",
+            )
+
+            response = getattr(self.client, get_or_post.lower())("/suppliers/frameworks/muttoning-clouds/declaration")
+
+            assert response.status_code == 404
+
+
+@mock.patch('app.main.views.frameworks.data_api_client', autospec=True)
+class TestDeclarationOverview(BaseApplicationTest):
+    def test_empty_declaration_no_prefill(self, data_api_client):
+        with self.app.test_client():
+            self.login()
+
+            data_api_client.get_framework.side_effect = _assert_args_and_return(
+                self.framework(slug="g-cloud-9", status="open"),
+                "g-cloud-9",
+            )
+            data_api_client.get_supplier_framework_info.side_effect = _assert_args_and_return(
+                self.supplier_framework(framework_slug="g-cloud-9", declaration={}),
+                1234,
+                "g-cloud-9",
+            )
+
+            response = self.client.get("/suppliers/frameworks/g-cloud-9/declaration")
 
 
 @mock.patch('app.main.views.frameworks.data_api_client', autospec=True)
