@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from collections import OrderedDict
 from itertools import chain
 
 from dateutil.parser import parse as date_parse
@@ -273,6 +274,75 @@ def framework_start_supplier_declaration(framework_slug):
 
 
 @main.route('/frameworks/<framework_slug>/declaration', methods=['GET'])
+@login_required
+def framework_supplier_declaration_overview(framework_slug):
+    framework = get_framework(data_api_client, framework_slug, allowed_statuses=['open'])
+
+    sf = data_api_client.get_supplier_framework_info(current_user.supplier_id, framework_slug)
+    # ensure our declaration is at least a dict
+    sf["declaration"] = sf.get("declaration") or {}
+
+    content = content_loader.get_manifest(framework_slug, 'declaration').filter(sf["declaration"])
+
+    sections_errors = OrderedDict(
+        (
+            section.slug,
+            (
+                section,
+                section.editable and get_validator(
+                    framework,
+                    content,
+                    sf["declaration"],
+                ).get_error_messages_for_page(section),
+            ),
+        )
+        for section in content
+    )
+
+    return render_template(
+        "frameworks/declaration_overview.html",
+        framework=framework,
+        supplier_framework=sf,
+        sections_errors=sections_errors,
+        validates=not any(errors for section, errors in sections_errors.values()),
+        framework_dates=content_loader.get_message(framework_slug, "dates"),
+    )
+
+
+@main.route('/frameworks/<framework_slug>/declaration', methods=['POST'])
+@login_required
+def framework_supplier_declaration_submit(framework_slug):
+    framework = get_framework(data_api_client, framework_slug, allowed_statuses=['open'])
+    content = content_loader.get_manifest(framework_slug, 'declaration').filter(sf["declaration"])
+
+    try:
+        declaration = data_api_client.get_supplier_declaration(current_user.supplier_id, framework_slug)["declaration"]
+    except APIError as e:
+        abort(400, "No declaration has been made by this supplier for this framework")
+
+    validator = get_validator(framework, content, declaration)
+    errors = validator.get_error_messages()
+    if errors:
+        abort(400, "This declaration has incomplete questions")
+
+    declaration["status"] = "complete"
+
+    try:
+        data_api_client.set_supplier_declaration(
+            current_user.supplier_id,
+            framework["slug"],
+            declaration,
+            current_user.email_address,
+        )
+    except APIError as e:
+        abort(e.status_code)
+
+    # follow existing flash message passing pattern
+    flash_key = "{}/declaration_complete".format(url_for('.framework_dashboard', framework_slug=framework['slug']))
+    flash(url, 'declaration_complete')
+    return redirect(url_for('.framework_dashboard', framework_slug=framework['slug']))
+
+
 @main.route('/frameworks/<framework_slug>/declaration/<string:section_id>', methods=['GET', 'POST'])
 @login_required
 def framework_supplier_declaration(framework_slug, section_id=None):
