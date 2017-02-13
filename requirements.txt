@@ -5,8 +5,7 @@ werkzeug==0.10.4
 python-dateutil==2.4.2
 
 git+https://github.com/alphagov/digitalmarketplace-utils.git@23.0.0#egg=digitalmarketplace-utils==23.0.0
-#git+https://github.com/alphagov/digitalmarketplace-content-loader.git@2.5.0#egg=digitalmarketplace-content-loader==2.5.0
--e file:///home/bob/code/gds/dmp/digitalmarketplace-content-loader
+git+https://github.com/alphagov/digitalmarketplace-content-loader.git@2.5.0#egg=digitalmarketplace-content-loader==2.7.0
 git+https://github.com/alphagov/digitalmarketplace-apiclient.git@7.10.0#egg=digitalmarketplace-apiclient==7.10.0
 
 # For Cloud Foundry

@@ -26,6 +26,22 @@
 {% endblock %}
 
 
+{% set make_declaration_button %}
+  {% if validates %}
+    <form method="POST" action="">
+      {%
+        with
+        advice = true,
+        type = "save",
+        label = "Make declaration"
+      %}
+        {% include "toolkit/button.html" %}
+      {% endwith %}
+    </form>
+  {% endif %}
+{% endset %}
+
+
 {% block main_content %}
   <div class="grid-row">
     <div class="column-two-thirds">
@@ -37,13 +53,15 @@
       {% endwith %}
     </div>
     <div class="column-two-thirds">
+      <p>
       {% if supplier_framework.declaration.status == "complete" %}
         You can come back and change your answers at any time before&nbsp;{{ framework_dates.framework_close_date }}.
       {% else %}
-        {% block make_declaration_button %}{% endblock %}
+        {{ make_declaration_button }}
         You must review or answer all questions and make your declaration 
         before&nbsp;{{ framework_dates.framework_close_date }} to apply to {{ framework.name }}.
       {% endif %}
+      </p>
     </div>
     <div class="column-one-whole">
       {% import "toolkit/summary-table.html" as summary %}
@@ -65,86 +83,31 @@
           field_headings_visible=False
         ) %}
           {% call summary.row(complete=not question.answer_required) %}
-            {{ summary.field_name(question.label) }}
-            {% if section_errors %}
-              {% call summary.field() %}
-                <a href="{{ url_for(".edit_service_submission", framework_slug=framework.slug, lot_slug=service_data.lot, service_id=service_id, section_id=section.id, _anchor=question.id) }}">
-                  {% if supplier_framework.prefillDeclarationFromFrameworkSlug and section.prefill %}
-                    Review answer
-                  {% else %}
-                    Answers required
-                  {% endif %}
-                </a>
-              {% endcall %}
-            {% elif not question.is_empty %}
-              {{ summary[question.type](question.value, question.assurance) }}
+            {{ summary.field_name(question.label|question_references(section.get_question)) }}
+            {% if section.editable %}
+              {% if section_errors %}
+                {% call summary.field() %}
+                  <a href="{{ url_for(".framework_supplier_declaration", framework_slug=framework.slug, section_id=section.id, _anchor=question.id) }}">
+                    {% if supplier_framework.prefillDeclarationFromFrameworkSlug and section.prefill %}
+                      Review answer
+                    {% else %}
+                      Answer required
+                    {% endif %}
+                  </a>
+                {% endcall %}
+              {% elif not question.is_empty %}
+                {{ summary[question.type](question.value, question.assurance) }}
+              {% endif %}
             {% endif %}
           {% endcall %}
         {% endcall %}
       {% endfor %}
     </div>
     <div class="column-two-thirds">
-      {% block make_declaration_button %}{% endblock %}
+      {{ make_declaration_button }}
       <p>
         <a href="{{ url_for(".framework_dashboard", framework_slug=framework.slug) }}">Return to application</a>
       </p>
     </div>
   </div>
-{% endblock %}
-
-
-{% block make_declaration_button %}
-  {% if validates %}
-    <form method="POST" action="">
-      {%
-        with
-        advice = true,
-        type = "save",
-        label = "Make declaration"
-      %}
-        {% include "toolkit/button.html" %}
-      {% endwith %}
-    </form>
-  {% endif %}
-{% endblock %}
-
-
-{% block before_sections %}
-<div class="column-one-third align-with-heading">
-  <p class='last-edited hint'>
-    Last edited:
-    {{ last_edit.createdAt|datetimeformat }}
-    by {{ last_edit.userName }}
-  </p>
-  {% if framework.status == 'open' %}
-    {% if not lot.oneServiceLimit and (unanswered_required or unanswered_optional) %}
-      <p class="last-edited">
-        {{ submission.multiline_string(
-          submission.unanswered_required_text(unanswered_required, unanswered_optional),
-          submission.unanswered_optional_text(unanswered_required, unanswered_optional)
-        ) }}
-      </p>
-    {% endif %}
-    {% if service_data.status == 'submitted' and declaration_status == 'complete' %}
-      <span class="service-status-published">This service is marked as complete and will be submitted at {{ dates.framework_close_date }}</span>
-    {% endif %}
-    {% if service_data.status == 'not-submitted' and can_mark_complete and framework.status == 'open' %}
-      {% include "partials/complete_service.html" %}
-    {% endif %}
-  {% elif framework.status == 'pending' %}
-    {% if unanswered_required or unanswered_optional %}
-      <p class="last-edited">
-        {{ submission.multiline_string(
-          submission.unanswered_required_text(unanswered_required, unanswered_optional),
-          submission.unanswered_optional_text(unanswered_required, unanswered_optional)
-        ) }}
-      </p>
-    {% endif %}
-  {% endif %}
-  {% if service_data.status == 'not-submitted' and not can_mark_complete and framework.status == 'open' %}
-  <p>
-    Once you’ve entered all the required information, you can mark the service as complete.
-  </p>
-  {% endif %}
-</div>
 {% endblock %}

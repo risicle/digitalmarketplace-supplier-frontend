@@ -2219,12 +2219,35 @@ class TestDeclarationOverviewSubmit(BaseApplicationTest):
 
 @mock.patch('app.main.views.frameworks.data_api_client', autospec=True)
 class TestDeclarationOverview(BaseApplicationTest):
+    def _extract_section_information(self, doc, section_title):
+        tables = doc.xpath(
+            "//table[preceding::h2[1][normalize-space(string())=$section_title]]",
+            section_title=section_title,
+        )
+        assert len(tables) == 1
+        table=tables[0]
+
+        return (
+            table.xpath("normalize-space(string(./caption))"),
+            tuple(
+                (
+                    row.xpath("normalize-space(string(./td[@class='summary-item-field-first']))"),
+                    row.xpath("normalize-space(string(./td[@class='summary-item-field']))"),
+                    row.xpath("normalize-space(string(./td[@class='summary-item-field']//a))"),
+                    tuple(row.xpath("./td[@class='summary-item-field']//a/@href")),
+                    tuple(li.xpath("normalize-space(string())") for li in row.xpath(
+                        "./td[@class='summary-item-field']//li"
+                    )),
+                ) for row in table.xpath(".//tr[@class='summary-item-row']")
+            )
+        )
+
     def test_empty_declaration_no_prefill(self, data_api_client):
         with self.app.test_client():
             self.login()
 
             data_api_client.get_framework.side_effect = _assert_args_and_return(
-                self.framework(slug="g-cloud-9", status="open"),
+                self.framework(slug="g-cloud-9", name="G-Cloud 9", status="open"),
                 "g-cloud-9",
             )
             data_api_client.get_supplier_framework_info.side_effect = _assert_args_and_return(
@@ -2234,6 +2257,85 @@ class TestDeclarationOverview(BaseApplicationTest):
             )
 
             response = self.client.get("/suppliers/frameworks/g-cloud-9/declaration")
+            doc = html.fromstring(response.get_data(as_text=True))
+
+            assert [e.xpath("normalize-space(string())") for e in doc.xpath(
+                "//nav//*[@role='breadcrumbs']//a",
+            )] == [
+                "Digital Marketplace",
+                "Your account",
+                "Apply to G-Cloud 9",
+            ]
+            assert doc.xpath(
+                "//nav//*[@role='breadcrumbs']//a/@href",
+            ) == [
+                "/",
+                "/suppliers",
+                "/suppliers/frameworks/g-cloud-9",
+            ]
+
+            assert doc.xpath(
+                "//p[contains(normalize-space(string()), $t)][contains(normalize-space(string()), $f)]",
+                t="You must review or answer all questions and make your declaration before",
+                f="G-Cloud 9",
+            )
+            assert not doc.xpath(
+                "//p[contains(normalize-space(string()), $t)]",
+                t="You can come back and change your answers",
+            )
+
+            assert not doc.xpath("//a[normalize-space(string())=$t]", t="Review answer")
+
+            assert doc.xpath("//a[normalize-space(string())=$t]", t="Answer required")
+            assert not doc.xpath(
+                # we want the href to *contain* $u but not *be* $u
+                "//a[normalize-space(string())=$t][not(starts-with(@href, $u)) or @href=$u]",
+                t="Answer required",
+                u="/suppliers/frameworks/g-cloud-9/declaration/",
+            )
+
+            assert not doc.xpath("//input[@value=$t]", t="Make declaration")
+
+            assert doc.xpath(
+                "//a[normalize-space(string())=$t][@href=$u]",
+                t="Return to application",
+                u="/suppliers/frameworks/g-cloud-9",
+            )
+
+            assert self._extract_section_information(doc, "Providing suitable services") == (
+                "Providing suitable services",
+                (
+                    (
+                        "No unfair access to information",
+                        "Answer required",
+                        "Answer required",
+                        ("/suppliers/frameworks/g-cloud-9/declaration/providing-suitable-services#unfairCompetition",),
+                        (),
+                    ),
+                    (
+                        "Required skills and resources",
+                        "Answer required",
+                        "Answer required",
+                        ("/suppliers/frameworks/g-cloud-9/declaration/providing-suitable-services#skillsAndResources",),
+                        (),
+                    ),
+                    (
+                        "What your team will deliver",
+                        "Answer required",
+                        "Answer required",
+                        ("/suppliers/frameworks/g-cloud-9/declaration/providing-suitable-" \
+                            "services#offerServicesYourselves",),
+                        (),
+                    ),
+                    (
+                        "Contractual responsibility and accountability",
+                        "Answer required",
+                        "Answer required",
+                        ("/suppliers/frameworks/g-cloud-9/declaration/providing-suitable-services#fullAccountability",),
+                        (),
+                    ),
+                ),
+            )
 
 
 @mock.patch('app.main.views.frameworks.data_api_client', autospec=True)
